@@ -1,3 +1,4 @@
+import sqlite3
 from typing import NamedTuple
 from urllib.parse import parse_qsl
 
@@ -275,12 +276,26 @@ class BibleCrawler:
         # ex: 다윗의 자손이시며 아브라함의 자손이신 예수 그리스도의 족보. ...
         return (i.text.strip() for i in raw_texts)
 
-    def make_bible_info(self):
+    def make_bible_info(self, conn):
         """
         본문 정보가 담긴 자료구조를 생성한다
         :return: 본문 정보 네임드튜플로 구성된 리스트
         """
-        bible_dict = self.bible_data[self.primary_key]
+        # sql 명령문: bible_data 테이블에서 입력한 primary_key 값에 해당하는 name을 출력하라
+        sql_command = """ SELECT name FROM bible_data WHERE bible_pk=%d """ % self.primary_key
+
+        # 커서를 꺼내 db를 검색한다
+        cursor = conn.cursor()
+        try:
+            data = cursor.execute(sql_command)
+            books_name = [book for book in data][0][0]
+
+        # 예외처리: data_table이 없을 경우
+        except sqlite3.Error as e:
+            print(e)
+            books_name = self.bible_data[self.primary_key].books_name
+
+        # paragraphs와 texts를 호출한다
         paragraphs = self.paragraphs_from_read_contents()
         texts = self.texts_from_read_contents()
 
@@ -288,7 +303,7 @@ class BibleCrawler:
         strip_comp = ((i[0], i[1]) for i in zip(paragraphs, texts) if i[0] is not '')
 
         # 성경 제목이 제거된 제너레이터에 성경책 이름과 장 숫자를 첨가해 새로운 제너레이터를 만든다
-        result_comp = ((bible_dict.books_name, self.chapter_num, i[0], i[1]) for i in strip_comp)
+        result_comp = ((books_name, self.chapter_num, i[0], i[1]) for i in strip_comp)
 
         # 최종 제너레이터를 순회하며 네임드튜플에 담는다
         return [BibleInfo(
